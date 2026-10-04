@@ -73,7 +73,9 @@ namespace VirtualOR
             state = AppState.Menu;
             if (WebBridge.Embedded) mode = WebBridge.Exam ? Mode.Exam : Mode.Guided;   // website "Training" = labels, targets, feedback
             if (autoStart || WebBridge.Embedded || WebBridge.Demo) { autoStart = false; StartOperation(); }   // embedded: the website already chose op + mode
-            if (WebBridge.Demo) StartCoroutine(procedure.DemoRun());
+            if (WebBridge.DemoKind == "clean") StartCoroutine(procedure.DemoClean());
+            else if (WebBridge.DemoKind == "mistake") { procedure.mode = Mode.Training; StartCoroutine(procedure.DemoMistake()); }
+            else if (WebBridge.Demo) StartCoroutine(procedure.DemoRun());
         }
 
         void Step(string t, float p) { loadingText = t; loadingProgress = p; }

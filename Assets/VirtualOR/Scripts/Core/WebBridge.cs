@@ -21,7 +21,8 @@ namespace VirtualOR
         public static string Op { get; private set; }
         public static bool Exam { get; private set; }
         public static int Resume { get; private set; }   // 1-based website step requested (not supported beyond 1, see README)
-        public static bool Demo { get; private set; }     // ?demo=1: scripted 10 s promo sequence
+        public static bool Demo { get { return DemoKind != ""; } }
+        public static string DemoKind { get; private set; }   // ?demo=1 (10 s promo) | clean | mistake (long takes for the pitch video)
         public static bool Diag { get; private set; }     // ?diag=1 (with demo): close-up shot of the wound for checking
 
         // website step (1..11) -> our internal step ids, in order
@@ -42,7 +43,7 @@ namespace VirtualOR
             if (q.TryGetValue("op", out v) && v.Length > 0) Op = v;
             Exam = q.TryGetValue("mode", out v) && v == "exam";
             int r; if (q.TryGetValue("resume", out v) && int.TryParse(v, out r)) Resume = Mathf.Clamp(r, 1, WebSteps);
-            Demo = q.TryGetValue("demo", out v) && v == "1";
+            DemoKind = q.TryGetValue("demo", out v) ? v : "";
             Diag = q.TryGetValue("diag", out v) && v == "1";
             sent = -1; finished = false;
         }

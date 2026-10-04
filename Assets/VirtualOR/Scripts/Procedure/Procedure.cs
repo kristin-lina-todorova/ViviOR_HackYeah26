@@ -551,7 +551,7 @@ namespace VirtualOR
             TryVessel(ref vesselSCI, new Vector2(0.016f, -0.07f) + Fo, new Vector2(0.075f, 0.03f) + Fo, "superficial circumflex iliac vein", 0.12f);
             vesselPending = false;
             foreach (var b in surf.bleeders) if (!b.sealed_ && b.rate > 0.1f) vesselPending = true;
-            if (Step.id == "dissect" && skin.core.MinInteriorDepth() >= 0.98f && ActiveBleeders() > 0 && !once.Contains("leftbleed")) Info("Still bleeding", "The wound is deep enough, but a vessel is still bleeding. Coagulate it before moving on.");
+            if (Step.id == "dissect" && skin.core.MinInteriorDepth() >= 0.98f && ActiveBleeders() > 0 && once.Add("leftbleed")) Info("Still bleeding", "The wound is deep enough, but a vessel is still bleeding. Coagulate it before moving on.");
         }
         void TryVessel(ref bool done, Vector2 a, Vector2 b, string name, float rate)
         {
@@ -868,6 +868,124 @@ namespace VirtualOR
                 t = 0; while (t < 3f) { t += Time.deltaTime; yield return null; }
             }
             view.ShowHands(true);
+        }
+
+        // ------------------------------------------------------------ long scripted takes for the pitch video (?demo=clean / mistake)
+        System.Collections.IEnumerator Wait(float d) { float t = 0; while (t < d) { t += Time.deltaTime; yield return null; } }
+        // camera glide (position + look target + fov), eased
+        System.Collections.IEnumerator Cam(Vector3 p0, Vector3 p1, Vector3 l0, Vector3 l1, float f0, float f1, float d)
+        {
+            float t = 0;
+            while (t < d) { t += Time.deltaTime; float u = Mathf.SmoothStep(0, 1, Mathf.Clamp01(t / d)); view.pos = Vector3.Lerp(p0, p1, u); view.LookAt(Vector3.Lerp(l0, l1, u)); view.fov = Mathf.Lerp(f0, f1, u); yield return null; }
+        }
+        Vector3 SkinPoint(Vector2 uv) { return world.patient.TransformPoint(skin.core.sample(uv).pos); }
+        // draw an incision along a -> b like the trainee would (progressive cut, blood following the blade)
+        System.Collections.IEnumerator CutAlong(Vector2 a, Vector2 b, float d, Vector3 camFrom, Vector3 camTo, Vector3 look)
+        {
+            stroke.Clear(); float t = 0;
+            while (t < d)
+            {
+                t += Time.deltaTime; float u = Mathf.Clamp01(t / d); Vector2 uv = Vector2.Lerp(a, b, u);
+                if (stroke.Count == 0 || Vector2.Distance(stroke[stroke.Count - 1], uv) > 0.0015f) { stroke.Add(uv); surf.AddBloodAt(uv, 0.003f); if (stroke.Count > 3 && stroke.Count % 6 == 0) skin.core.SetCut(stroke, 0.38f); }
+                view.aimPoint = SkinPoint(uv); view.pressing = true;
+                view.pos = Vector3.Lerp(camFrom, camTo, Mathf.SmoothStep(0, 1, u)); view.LookAt(look);
+                yield return null;
+            }
+            view.pressing = false; FinishIncision();
+        }
+        void SetupDraped()
+        {
+            demo = true; surf.CompletePrep(); prepDone = true; dryLeft = 0;
+            stepIndex = IndexOf("drape"); StartStep(); world.ApplyDrapes();
+            for (int i = 0; i < checks.Length; i++) checks[i] = true; antibioticAsked = true; timeoutDone = true; showChecklist = false;
+            stepIndex = IndexOf("incision"); StartStep(); caption = ""; captionT = 0;
+        }
+
+        public System.Collections.IEnumerator DemoClean()
+        {
+            SetupDraped();
+            Vector3 g = world.GroinWorld, home = view.home, mid = SkinPoint((incisionA + incisionB) * 0.5f);
+            Vector3 monitor = new Vector3(-0.45f, 1.62f, -1.62f), chest = world.patient.TransformPoint(new Vector3(0, 1.25f, 0.15f)), tray = world.tray.position;
+            Vector3 over = mid + new Vector3(0.22f, 0.40f, -0.02f), close = mid + new Vector3(0.15f, 0.29f, -0.01f);
+            view.pos = home; view.LookAt(monitor); view.fov = 55f; view.cam.fieldOfView = 55f;
+            yield return Wait(2.2f);   // let the drapes settle before recording
+            Debug.Log("VIVIOR_DEMO_START");
+            // 1. slow look around the theatre: monitors -> patient -> instrument tray
+            yield return Cam(home, home, monitor, chest, 55, 55, 2.8f);
+            yield return Cam(home, home, chest, tray, 55, 52, 3.0f);
+            yield return Wait(0.6f);
+            // 2. pick up the scalpel from the tray
+            RequestTool(Tool.Scalpel);
+            yield return Cam(home, home, tray, g, 52, 46, 1.8f);
+            yield return Wait(0.4f);
+            // 3. clean incision along the marking, feedback appears
+            yield return Cam(home, over, g, mid, 46, 38, 1.4f);
+            view.ShowHands(false);
+            yield return CutAlong(incisionA, incisionB, 2.6f, over, Vector3.Lerp(over, close, 0.4f), mid);
+            yield return Wait(2.4f);
+            // 4. diathermy through the fat: a vein is divided and bleeds, then it is coagulated
+            view.ShowHands(true); RequestTool(Tool.Cautery); yield return Wait(1.1f); view.ShowHands(false);
+            Vector3 from = view.pos; float t = 0; bool bled = false;
+            while (t < 3.2f)
+            {
+                t += Time.deltaTime; float u = Mathf.Clamp01(t / 3.2f);
+                var c = skin.core.cut; int n = c.Count; if (n < 3) break;
+                int k = Mathf.Clamp(Mathf.RoundToInt(Mathf.Lerp(1, n - 2, Mathf.PingPong(t * 1.1f, 1f))), 1, n - 2);
+                for (int j = 1; j < n - 1; j++) skin.core.DeepenAt(j, Time.deltaTime * 0.24f, 0.009f);
+                CheckVessels();
+                if (!bled && u > 0.45f) { bled = true; if (ActiveBleeders() == 0) { AddOoze(n / 2, 0.16f); Info("Bleeding vessel", "You divided the superficial epigastric vein. Coagulate it with the diathermy."); } }
+                int L = skin.core.chainL[k], R = skin.core.chainR[k];
+                view.aimPoint = world.patient.TransformPoint((skin.core.x[L] + skin.core.x[R]) * 0.5f - skin.core.restN[L] * (skin.core.depth[k] * skin.core.thick[L] * 0.8f));
+                view.pressing = true; cauteryOn = 0.12f; smoke.transform.position = view.aimPoint.Value;
+                view.pos = Vector3.Lerp(from, close, Mathf.SmoothStep(0, 1, u)); view.fov = Mathf.Lerp(38f, 32f, u); view.LookAt(mid);
+                yield return null;
+            }
+            view.pressing = false;
+            yield return Wait(2.2f);   // blood fills the wound
+            // coagulate the bleeder
+            foreach (var b in surf.bleeders)
+            {
+                if (b.sealed_ || b.rate < 0.05f) continue;
+                int k = Mathf.Clamp(b.cutIndex, 0, skin.core.cut.Count - 1); int L = skin.core.chainL[k];
+                view.aimPoint = world.patient.TransformPoint(skin.core.x[L] - skin.core.restN[L] * (skin.core.depth[k] * skin.core.thick[L] * 0.5f)); view.pressing = true;
+                cauteryOn = 0.6f; smoke.transform.position = view.aimPoint.Value; audio.Play("sizzle"); b.sealed_ = true;
+                yield return Wait(0.8f);
+            }
+            surf.pool *= 0.3f; view.pressing = false;
+            for (int j = 1; j < skin.core.cut.Count - 1; j++) skin.core.DeepenAt(j, 1f, 0.009f);
+            CheckVessels(); CheckDissectDone();
+            // 5. step complete, score panel
+            yield return Cam(close, over, mid, mid, 32, 40, 2.2f);
+            yield return Wait(1.6f);
+            Debug.Log("VIVIOR_DEMO_END");
+        }
+
+        public System.Collections.IEnumerator DemoMistake()
+        {
+            SetupDraped();
+            Vector3 g = world.GroinWorld, home = view.home;
+            Vector2 d = field.LigamentDir, cr = new Vector2(d.y, -d.x); if (cr.y < 0) cr = -cr;
+            Vector2 a = incisionA - cr * 0.025f, b = incisionB - cr * 0.025f;   // 2.5 cm too low: on the ligament
+            Vector3 mid = SkinPoint((a + b) * 0.5f), over = mid + new Vector3(0.22f, 0.40f, -0.02f);
+            RequestTool(Tool.Scalpel);
+            view.pos = home; view.LookAt(g); view.fov = 46f; view.cam.fieldOfView = 46f;
+            yield return Wait(2.4f);
+            Debug.Log("VIVIOR_DEMO_START");
+            yield return Cam(home, over, g, mid, 46, 38, 1.6f);
+            // 1. incision too low -> error with the explanation, score drops
+            yield return CutAlong(a, b, 2.4f, over, over, mid);
+            yield return Wait(4.2f);
+            // 2. diathermy on intact skin -> burn error
+            RequestTool(Tool.Cautery); yield return Wait(1.2f);
+            Vector2 burnUV = (incisionA + incisionB) * 0.5f + cr * 0.03f; float t = 0;
+            while (t < 1.0f) { t += Time.deltaTime; view.aimPoint = SkinPoint(burnUV); view.pressing = true; cauteryOn = 0.12f; smoke.transform.position = view.aimPoint.Value; surf.Burn(burnUV, 0.003f); yield return null; }
+            view.pressing = false;
+            Error("burn", "Skin burn", "Diathermy on the skin surface causes a full-thickness burn and poor scar. Use it only inside the wound, on fat and bleeding points.", 5);
+            yield return Wait(4.0f);
+            // 3. end of the attempt: debrief with the score and every error explained
+            finished = true; running = false;
+            yield return Wait(5.5f);
+            Debug.Log("VIVIOR_DEMO_END");
         }
 
         // ------------------------------------------------------------ anatomy questions
