@@ -1,0 +1,27 @@
+# Unity: generated / per-machine
+/Library/
+/Temp/
+/Obj/
+/Build/
+/Builds/
+/Logs/
+/UserSettings/
+/MemoryCaptures/
+/Recordings/
+*.csproj
+*.sln
+*.slnx
+*.suo
+*.user
+*.pidb
+*.booproj
+*.unityproj
+.vs/
+.vscode/
+.idea/
+*.apk
+*.aab
+crashlytics-build.properties
+
+# macOS
+.DS_Store

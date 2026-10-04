@@ -1,0 +1,9 @@
+<!-- Keep engine types that are only created at runtime (GameObject.CreatePrimitive adds Capsule/Sphere/Box colliders;
+     everything in the scene is built from code, so Unity's build stripping cannot see them). -->
+<linker>
+  <assembly fullname="UnityEngine.PhysicsModule" preserve="all"/>
+  <assembly fullname="UnityEngine.TextRenderingModule" preserve="all"/>
+  <assembly fullname="UnityEngine.ParticleSystemModule" preserve="all"/>
+  <assembly fullname="UnityEngine.AudioModule" preserve="all"/>
+  <assembly fullname="UnityEngine.IMGUIModule" preserve="all"/>
+</linker>
