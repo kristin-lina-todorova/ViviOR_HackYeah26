@@ -41,10 +41,3 @@ The first module is an **open inguinal hernia repair (Lichtenstein), right side*
 | BodyParts3D anatomy | © DBCLS | CC BY-SA 2.1 JP |
 | Inter font | The Inter Project Authors | SIL OFL 1.1 |
 | Atkinson Hyperlegible font | Braille Institute of America | SIL OFL 1.1 |
-
-## Disclosure (HackYeah)
-
-> **To complete by the team before submission.**
-> - Work that existed before HackYeah vs. work done during the event:
-> - Team members and roles:
-> - Use of AI tools: parts of the code, procedural textures, website integration and debugging were developed with an AI coding assistant (Claude Code), directed and reviewed by the team.
