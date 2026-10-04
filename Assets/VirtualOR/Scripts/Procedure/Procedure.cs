@@ -63,6 +63,7 @@ namespace VirtualOR
         // interaction state
         readonly List<Vector2> stroke = new List<Vector2>(); bool stroking; TissueSheet strokeSheet;
         TissueCore.Attachment grabAttach; Rope.Grab ropeGrab; Rope grabRope;
+        float lastCutRebuild;
         Vector3 lastPrepPoint; Vector2 lastPrepUV; bool lastPrepValid;
         const float PrepRadius = 0.035f;   // big sponge: 7 cm wide stroke
         public Vector2 incisionA, incisionB, apoA, apoB;     // guide lines (patient-local uv)
@@ -386,7 +387,17 @@ namespace VirtualOR
                 var sh = strokeSheet.Raycast(view.MouseRay());
                 if (sh.hit && sh.region == TissueRegion.Surface)
                 {
-                    if (Vector2.Distance(stroke[stroke.Count - 1], sh.uv) > 0.0015f) { stroke.Add(sh.uv); if (strokeSheet == skin && stroke.Count % 4 == 0 && stroke.Count > 3) skin.core.SetCut(stroke, 0.38f); if (strokeSheet == skin) BleedAlongCut(); }
+                    if (Vector2.Distance(stroke[stroke.Count - 1], sh.uv) > 0.0015f)
+                    {
+                        stroke.Add(sh.uv);
+                        if (strokeSheet == skin)
+                        {
+                            surf.AddBloodAt(sh.uv, 0.003f);   // thin bleeding line follows the blade at once
+                            // re-cutting the membrane re-triangulates it (~0.1-0.2 s in WebGL): at most twice a second while dragging
+                            if (stroke.Count > 3 && Time.unscaledTime - lastCutRebuild > 0.5f) { lastCutRebuild = Time.unscaledTime; skin.core.SetCut(stroke, 0.38f); }
+                            BleedAlongCut();
+                        }
+                    }
                 }
             }
             if (t == Tool.Cautery && (p.kind == PickKind.Skin || p.kind == PickKind.Apo || p.kind == PickKind.Cord || p.kind == PickKind.Nerve || p.kind == PickKind.Sac || p.kind == PickKind.Structure))
